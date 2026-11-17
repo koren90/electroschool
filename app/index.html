@@ -13,6 +13,7 @@
 </head>
 <body>
 <header id="bar">
+  <button id="menubtn" class="menubtn" aria-expanded="false" aria-controls="bar" title="Soubor a příklady">☰</button>
   <div class="tabs" role="tablist">
     <button class="tab active" data-tab="schema" role="tab">Schéma</button>
     <button class="tab" data-tab="real" role="tab">Realita</button>
@@ -23,17 +24,6 @@
     <button data-cmd="open" title="Otevřít .cad (⌘O)">Otevřít…</button>
     <button data-cmd="save" title="Uložit (⌘S)">Uložit</button>
     <select id="examples" title="Ukázková schémata"><option value="">Příklady…</option></select>
-  </div>
-  <div class="grp ed">
-    <button data-cmd="undo" title="Zpět (⌘Z)">↶</button>
-    <button data-cmd="redo" title="Znovu (⇧⌘Z)">↷</button>
-    <button data-cmd="rotate" title="Otočit (R)">⟳</button>
-    <button data-cmd="delete" title="Smazat (⌫)">✕</button>
-  </div>
-  <div class="grp ed">
-    <button data-cmd="zoomout" title="Oddálit">−</button>
-    <button data-cmd="fit" title="Zobrazit vše">Vše</button>
-    <button data-cmd="zoomin" title="Přiblížit">+</button>
     <button data-cmd="png" title="Exportovat obrázek PNG">PNG</button>
   </div>
   <div class="grp rl">
@@ -49,7 +39,12 @@
 <main>
   <aside id="palette" class="pal"></aside>
   <aside id="rpalette" class="pal"></aside>
-  <div id="stage"><canvas id="cv"></canvas></div>
+  <div id="stage"><canvas id="cv"></canvas>
+    <div class="cvbar" id="cvTools"><button id="cvBand" title="Výběr oblasti tažením (Shift + tažení)">Oblast</button></div>
+    <div class="cvbar" id="cvHist"><button data-cmd="undo" title="Zpět (⌘Z)" aria-label="Zpět">↶</button><button data-cmd="redo" title="Znovu (⇧⌘Z)" aria-label="Znovu">↷</button></div>
+    <div class="cvbar" id="cvCtx"><button id="cvProps" title="Vlastnosti vybraného prvku (dvojklik)">Vlastnosti</button><button data-cmd="rotate" id="cvRot" title="Otočit (R)">Otočit</button><button data-cmd="delete" id="cvDel" title="Smazat (⌫)">Smazat</button><button id="cvDone" class="primary" title="Ukončit vkládání nebo vodič (Esc)">Hotovo</button></div>
+    <div class="cvbar" id="cvZoom"><button data-cmd="zoomin" title="Přiblížit" aria-label="Přiblížit">+</button><button data-cmd="zoomout" title="Oddálit" aria-label="Oddálit">−</button><button data-cmd="fit" title="Zobrazit vše">Vše</button></div>
+  </div>
 </main>
 <div id="calcview"></div>
 <footer id="status"><span id="hint"></span><span id="pos"></span></footer>

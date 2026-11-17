@@ -32,7 +32,7 @@ main { flex: 1; display: flex; min-height: 0; }
 body.simulating .pal { opacity: .35; pointer-events: none; }
 #stage { flex: 1; position: relative; min-width: 0; background: #8f9299; }
 @media (prefers-color-scheme: dark) { #stage { background: #151517; } }
-#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; -webkit-touch-callout: none; }
 #status { display: flex; justify-content: space-between; gap: 12px; padding: 4px 10px; background: var(--panel); border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; }
 #hint { overflow: hidden; text-overflow: ellipsis; }
 dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); padding: 18px; min-width: 320px; max-width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,.35); user-select: text; -webkit-user-select: text; }
@@ -96,3 +96,45 @@ body.calc .grp.rl { display: none; }
 .calcsec { max-width: 1500px; margin: 18px auto 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
 .fields label:has(select) { grid-template-columns: 1fr 220px; }
 .fields label:has(select) select { grid-column: 2; }
+
+/* ovládání na plátně */
+.cvbar { position: absolute; display: flex; gap: 6px; align-items: center; z-index: 3; }
+.cvbar[hidden], .cvbar > [hidden] { display: none; }
+.cvbar button { background: var(--panel); box-shadow: 0 1px 6px rgba(0,0,0,.25); min-width: 34px; min-height: 34px; font-size: 14px; }
+.cvbar button:hover { background: var(--hover); }
+.cvbar button.on, .cvbar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 0; }
+#cvTools { left: 10px; top: 10px; }
+#cvHist { right: 10px; top: 10px; }
+#cvZoom { right: 10px; bottom: 10px; flex-direction: column; }
+#cvZoom button { min-width: 42px; min-height: 42px; font-size: 18px; font-weight: 600; }
+#cvCtx { left: 50%; bottom: 12px; transform: translateX(-50%); }
+body.simulating #cvTools, body.simulating #cvCtx, body.simulating #cvHist { display: none; }
+body.calc .cvbar { display: none; }
+.menubtn { display: none; }
+@media (pointer: coarse) { .cvbar button { min-height: 42px; min-width: 42px; } button, select { min-height: 36px; } }
+
+/* úzká obrazovka (telefon): paleta dole, soubory v nabídce */
+@media (max-width: 860px), (max-height: 520px) {
+  #bar { gap: 6px 8px; padding: 6px 8px; position: relative; }
+  .menubtn { display: inline-block; }
+  #bar > .grp.ed:not(.right) { display: none; position: absolute; left: 8px; top: 100%; z-index: 20; flex-direction: column; align-items: stretch; gap: 6px; padding: 10px; min-width: 240px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  #bar.menuopen > .grp.ed:not(.right) { display: flex; }
+  #simmsg { display: none; }
+  button.primary { min-width: 0; padding: 4px 10px; }
+  .tabs { flex: 1 1 auto; } .tab { padding: 4px 6px; flex: 1; }
+  #bar .grp.right { margin-left: 0; }
+  main { flex-direction: column; }
+  #stage { order: 1; }
+  .pal { order: 2; width: auto; height: 96px; display: flex; flex-direction: row; gap: 4px; overflow-x: auto; overflow-y: hidden; border-right: 0; border-top: 1px solid var(--line); padding: 6px; }
+  body.real #palette { display: none; }
+  body:not(.real) #rpalette { display: none; }
+  .pal h3 { display: none; }
+  .pal .setpick { flex-direction: column; flex: none; width: 92px; margin: 0; align-self: stretch; }
+  .pal .setpick button { flex: 1; }
+  .pal .items, .pal h3.closed + .items { display: flex; gap: 4px; }
+  .tool { width: 74px; height: 74px; aspect-ratio: auto; flex: none; }
+  .pal .setpick button { font-size: 10px; padding: 2px; }
+  #cvCtx { bottom: 60px; }
+  #status { font-size: 11px; padding: 3px 8px; }
+  #pos { display: none; }
+}

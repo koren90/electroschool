@@ -26,6 +26,25 @@ $JSC app/core.js app/real.js tools/domov3f_test.js
 $JSC app/calc.js tools/calc_test.js
 ```
 
+Testy v Node (bez macOS, stejné kontroly jako výše přes `tools/run.js`):
+
+```bash
+node tools/run.js app/core.js,tools/elektro_test.js -- Priklady
+node tools/run.js app/core.js,app/real.js,tools/real_test.js -- Priklady
+node tools/run.js app/core.js,app/real.js,tools/route_test.js -- Priklady
+node tools/run.js app/core.js,app/real.js,tools/domov3f_test.js
+node tools/run.js app/calc.js,tools/calc_test.js
+```
+
+Testy ovládání v prohlížeči (Playwright, Chrome; myš i dotyk, plátno a nabídky):
+
+```bash
+pip install playwright
+python -m http.server 8766 --directory app &
+python tools/e2e/ux.py
+python tools/e2e/smoke.py
+```
+
 Ukázková schémata ve složce `Priklady/` (kromě souborů „ElectroSchool – …“) pocházejí z repozitáře [ELECTROALL/CADE-SIMU](https://github.com/ELECTROALL/CADE-SIMU).
 
 ## Původní popis
@@ -40,6 +59,10 @@ přetažením do okna nebo přes „Otevřít v aplikaci“ ve Finderu. Ukázky 
 ## Ovládání
 - **Kreslení:** součástku vyberte v paletě a klikněte do plátna (R = otočit). Vodič: W, klik–klik, konec na svorce nebo dvojklikem.
 - **Úpravy:** dvojklik = vlastnosti (označení, svorky, čas, barva), tažení = přesun, ⌫ = smazat, ⌘Z/⇧⌘Z, ⌘C/⌘V.
+- **Plátno:** tažení prázdné plochy posouvá výkres, Shift + tažení (nebo tlačítko **Oblast**) vybírá oblast, kolečko s ⌘ nebo dva prsty přibližují.
+  Zpět/Znovu a přiblížení jsou tlačítka přímo na plátně, Otočit / Smazat / Vlastnosti / Hotovo se ukážou jen tam, kde dávají smysl.
+- **Dotyk (telefon, tablet):** jeden prst vybírá a posouvá přístroje (krátké klepnutí je jen vybere), tažení prázdné plochy posouvá výkres,
+  dva prsty posouvají a přibližují. Vložení součástky a body vodiče se provedou až po zvednutí prstu. Na úzké obrazovce je paleta dole a soubory v nabídce ☰.
 - **Simulace (⌘R):** jističe a vypínače se zapínají kliknutím, tlačítka držením myši (Shift+klik = zůstane stisknuté),
   klik na tepelné relé = vybavení. Kontakty se řídí cívkou / tlačítkem se **stejným označením**.
 - Vodiče se v simulaci barví podle potenciálu (L1 hnědá, L2 černá, L3 šedá, N modrá, PE zelená). Zkrat vybaví jistič.

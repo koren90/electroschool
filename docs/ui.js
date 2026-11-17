@@ -42,7 +42,8 @@ function pushUndo() { undoStack.push(snap_()); if (undoStack.length > 150) undoS
 function restore(json) { const j = JSON.parse(json); if (Array.isArray(j)) doc.items = j; else { doc.items = j.items; doc.real = j.real || ES.emptyReal(); } sel = new Set(); rsel = new Set(); rwsel = -1; touch(); render(); }
 function hint(s) { $('#hint').textContent = s; }
 const HINTS = {
-  select: 'Výběr: klik = vybrat, tažení = přesun, dvojklik = vlastnosti, R = otočit, ⌫ = smazat. Posun plátna: dva prsty / mezerník + tažení, zoom: gesto nebo ⌘ + kolečko.',
+  select: 'Výběr: klik = vybrat, tažení prvku = přesun, dvojklik = vlastnosti, R = otočit, ⌫ = smazat. Tažení prázdné plochy posouvá výkres, Shift + tažení vybere oblast. Zoom: dva prsty nebo ⌘ + kolečko.',
+  band: 'Oblast: tažením přes prvky je vyberete. Pak je lze přesunout nebo smazat.',
   place: 'Kliknutím vložíte součástku. R = otočit, Esc = konec.',
   wire: 'Vodič: klik = začátek, další kliky = lomové body, konec na svorce nebo dvojklikem. Odbočka z vodiče vytvoří tečku; křížení bez tečky spojené není. Shift = obrátit lomení, Esc = konec.',
   gfx: 'Tažením nakreslíte tvar. Esc = konec.',
@@ -146,8 +147,21 @@ function drawScene(c, opt) {
     c.fillStyle = col; c.beginPath(); c.arc(x, y, 0.75, 0, 7); c.fill();
   }
 }
+// ovládací prvky na plátně: zobrazují se jen tam, kde dávají smysl
+function syncBars() {
+  const real = mode === 'real', t = real ? rtool : tool, n = real ? rsel.size + (rwsel >= 0 ? 1 : 0) : sel.size;
+  const place = t.kind !== 'select' && t.kind !== 'band', draft = real ? !!rdraft : !!(tool.kind === 'wire' && tool.start);
+  const one = !real && sel.size === 1 && !place;
+  $('#cvTools').hidden = real;
+  $('#cvBand').classList.toggle('on', !real && tool.kind === 'band');
+  $('#cvProps').hidden = !one;
+  $('#cvRot').hidden = real || !(place || n > 0);
+  $('#cvDel').hidden = place || n === 0;
+  $('#cvDone').hidden = !(place || draft || (!real && tool.kind === 'band'));
+  $('#cvCtx').hidden = [...$('#cvCtx').children].every(b => b.hidden);
+}
 function render() {
-  resize();
+  resize(); syncBars();
   if (mode === 'real') return renderReal();
   const dpr = window.devicePixelRatio || 1, W = cv.width / dpr, H = cv.height / dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
@@ -349,13 +363,13 @@ function setTool(t) {
   cv.style.cursor = t.kind === 'select' ? 'default' : 'crosshair';
   hint(HINTS[t.kind]); render();
 }
-cv.addEventListener('mousedown', e => {
+function handleDown(e) {
   if (mode === 'real') return rDown(e);
   const [rx, ry] = toWorld(e), x = snap(rx), y = snap(ry);
   mouse.rx = rx; mouse.ry = ry; mouse.x = x; mouse.y = y;
   if (e.button === 1 || spaceDown) { drag = { kind: 'pan', cx: e.clientX, cy: e.clientY }; cv.style.cursor = 'grabbing'; return; }
   if (e.button !== 0) return;
-  if (sim) { const it = hit(rx, ry); if (it && ES.simPress(sim, it, true, e.shiftKey, partOf(it, rx, ry))) { pressed = it; simTick(0); } return; }
+  if (sim) { const it = hit(rx, ry); if (it && ES.simPress(sim, it, true, e.shiftKey, partOf(it, rx, ry))) { pressed = it; simTick(0); } else drag = { kind: 'pan', cx: e.clientX, cy: e.clientY }; return; }
   if (tool.kind === 'place') { place(tool.type, x, y); render(); return; }
   if (tool.kind === 'wire') {
     if (!tool.start) { tool.start = [x, y]; render(); return; }
@@ -373,19 +387,22 @@ cv.addEventListener('mousedown', e => {
       pushUndo(); const it = ES.newItem(8, x, y); it.extra = v.extra.replace(/[#$*]/g, ''); it.n[10] = x + 6; it.n[11] = y + (+v.size || 4); doc.items.push(it); touch(); setTool({ kind: 'select' });
     }); return;
   }
+  if (tool.kind === 'band') { if (!e.shiftKey) sel = new Set(); drag = { kind: 'band', x0: rx, y0: ry, add: e.shiftKey }; render(); return; }
   const it = hit(rx, ry);
   if (it) {
     if (e.shiftKey) { sel.has(it.uid) ? sel.delete(it.uid) : sel.add(it.uid); } else if (!sel.has(it.uid)) sel = new Set([it.uid]);
-    drag = { kind: 'move', lx: x, ly: y, moved: false };
-  } else { if (!e.shiftKey) sel = new Set(); drag = { kind: 'band', x0: rx, y0: ry, add: e.shiftKey }; }
+    drag = { kind: 'move', lx: x, ly: y, moved: false, sx: e.clientX, sy: e.clientY, touch: e.pointerType === 'touch' };
+  } else if (e.shiftKey) drag = { kind: 'band', x0: rx, y0: ry, add: true };
+  else { sel = new Set(); drag = { kind: 'pan', cx: e.clientX, cy: e.clientY }; }
   render();
-});
-window.addEventListener('mousemove', e => {
+}
+function handleMove(e) {
   if (mode === 'real') return rMove(e);
   const [rx, ry] = toWorld(e); mouse.rx = rx; mouse.ry = ry; mouse.x = snap(rx); mouse.y = snap(ry); mouse.in = e.target === cv;
   if (drag) {
     if (drag.kind === 'pan') { view.ox += e.clientX - drag.cx; view.oy += e.clientY - drag.cy; drag.cx = e.clientX; drag.cy = e.clientY; }
     else if (drag.kind === 'move') {
+      if (!drag.moved && drag.touch && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < TAP) return; // klepnutí prstem nesmí přístroj posunout
       const dx = mouse.x - drag.lx, dy = mouse.y - drag.ly;
       if (dx || dy) { if (!drag.moved) { pushUndo(); drag.moved = true; } moveItems(dx, dy); drag.lx = mouse.x; drag.ly = mouse.y; }
     }
@@ -394,14 +411,15 @@ window.addEventListener('mousemove', e => {
   if (!sim && !drag && tool.kind === 'select' && e.target === cv) { const h = hit(rx, ry); if (h !== hover) { hover = h; hint((h && linkHint(h)) || HINTS.select); } }
   if (!sim || drag) render();
   if (sim && !drag) { const it = hit(rx, ry), c = it && sim.byUid.get(it.uid); hover = it; cv.style.cursor = c && (c.d.click || c.d.kind === 'breaker' || c.d.kind === 'mswitch' || c.d.kind === 'thermal' || c.d.kind === 'fuse' || c.d.kind === 'mstarter' || c.d.kind === 'rcd' || c.d.kind === 'hsw' || c.d.kind === 'socket' || c.d.kind === 'socket3' || c.d.kind === 'load3') ? 'pointer' : 'default'; }
-});
-window.addEventListener('mouseup', e => {
+}
+function handleUp(e) {
   if (mode === 'real') return rUp(e);
   { const [rx, ry] = toWorld(e); mouse.rx = rx; mouse.ry = ry; mouse.x = snap(rx); mouse.y = snap(ry); }
   if (pressed && sim) { ES.simPress(sim, pressed, false, e.shiftKey); pressed = null; }
   if (!drag) return;
   const d = drag; drag = null;
   if (d.kind === 'pan') cv.style.cursor = tool.kind === 'select' ? 'default' : 'crosshair';
+  if (d.kind === 'band' && tool.kind === 'band') setTool({ kind: 'select' });
   if (d.kind === 'move' && d.moved) touch();
   if (d.kind === 'band') {
     const x0 = Math.min(d.x0, mouse.rx), y0 = Math.min(d.y0, mouse.ry), x1 = Math.max(d.x0, mouse.rx), y1 = Math.max(d.y0, mouse.ry);
@@ -409,7 +427,63 @@ window.addEventListener('mouseup', e => {
   }
   if (d.kind === 'gfx' && (d.x0 !== mouse.x || d.y0 !== mouse.y)) { pushUndo(); const g = ES.newItem(tool.type, d.x0, d.y0); g.n[10] = mouse.x; g.n[11] = mouse.y; doc.items.push(g); touch(); }
   render();
+}
+
+// ------------------------------------------------------------ dotyk a ukazatele
+// Myš a pero jdou přímo do původních obsluh. Dotyk: jeden prst vybírá a posouvá přístroje, tažení prázdné plochy posouvá výkres,
+// dva prsty posouvají a přibližují. Nástroje „vložit“ a „vodič“ se provedou až po zvednutí prstu (prst nezakrývá místo a lze předtím posunout výkres).
+const TAP = 10, tp = new Map();
+let tg = null, tt = null;
+const curView = () => mode === 'real' ? rview : view;
+function cancelAction() {
+  if (pressed && sim) { ES.simPress(sim, pressed, false, false); pressed = null; }
+  drag = null; rdrag = null;
+}
+function startGesture() {
+  const a = [...tp.values()].slice(0, 2), V = curView();
+  tg = { d: Math.max(10, Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y)), cx: (a[0].x + a[1].x) / 2, cy: (a[0].y + a[1].y) / 2, s: V.s, ox: V.ox, oy: V.oy };
+}
+function doGesture() {
+  const a = [...tp.values()].slice(0, 2), V = curView(), r = cv.getBoundingClientRect();
+  const d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), cx = (a[0].x + a[1].x) / 2, cy = (a[0].y + a[1].y) / 2;
+  const lo = mode === 'real' ? 0.4 : 0.8, hi = mode === 'real' ? 14 : 24, ns = Math.max(lo, Math.min(hi, tg.s * d / tg.d));
+  const wx = (tg.cx - r.left - tg.ox) / tg.s, wy = (tg.cy - r.top - tg.oy) / tg.s;
+  V.s = ns; V.ox = cx - r.left - wx * ns; V.oy = cy - r.top - wy * ns; render();
+}
+const touchNow = () => sim || mode === 'real' ? sim || rtool.kind === 'select' : tool.kind === 'select' || tool.kind === 'gfx' || tool.kind === 'band';
+cv.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'touch') return handleDown(e);
+  e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  tp.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (tp.size >= 2) { // druhý prst: gesto, první dotyk výběr nemění
+    if (tt && !(drag && drag.moved) && !(rdrag && rdrag.moved)) { sel = tt.sel0; rsel = tt.rsel0; rwsel = tt.rwsel0; }
+    tt = null; cancelAction(); startGesture(); render(); return;
+  }
+  tt = { id: e.pointerId, sx: e.clientX, sy: e.clientY, e0: e, now: touchNow(), pan: false, sel0: new Set(sel), rsel0: new Set(rsel), rwsel0: rwsel };
+  if (tt.now) handleDown(e);
 });
+window.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'touch') return handleMove(e);
+  const p = tp.get(e.pointerId); if (!p) return;
+  p.x = e.clientX; p.y = e.clientY;
+  if (tg && tp.size >= 2) { e.preventDefault(); doGesture(); return; }
+  if (!tt || tt.id !== e.pointerId) return;
+  if (tt.now) return handleMove(e);
+  if (!tt.pan && Math.hypot(e.clientX - tt.sx, e.clientY - tt.sy) > TAP) { tt.pan = true; tt.lx = tt.sx; tt.ly = tt.sy; }
+  if (tt.pan) { const V = curView(); V.ox += e.clientX - tt.lx; V.oy += e.clientY - tt.ly; tt.lx = e.clientX; tt.ly = e.clientY; render(); }
+});
+function pointerEnd(e) {
+  if (e.pointerType !== 'touch') return e.type === 'pointerup' ? handleUp(e) : undefined;
+  tp.delete(e.pointerId);
+  if (tg) { if (tp.size < 2) { tg = null; tt = null; } return; }
+  if (tt && tt.id === e.pointerId) {
+    const t = tt; tt = null;
+    if (!t.now && !t.pan && e.type === 'pointerup') { handleDown(t.e0); handleUp(e); }
+    else if (t.now) handleUp(e);
+  }
+}
+window.addEventListener('pointerup', pointerEnd);
+window.addEventListener('pointercancel', pointerEnd);
 cv.addEventListener('dblclick', e => {
   if (sim) return;
   if (mode === 'real') return rDbl(e);
@@ -425,8 +499,8 @@ cv.addEventListener('wheel', e => {
   if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.012), e.clientX - r.left, e.clientY - r.top);
   else { V.ox -= e.deltaX; V.oy -= e.deltaY; render(); }
 }, { passive: false });
-cv.addEventListener('gesturestart', e => { e.preventDefault(); const V = mode === 'real' ? rview : view; V._gs = V.s; });
-cv.addEventListener('gesturechange', e => { e.preventDefault(); const V = mode === 'real' ? rview : view, r = cv.getBoundingClientRect(); zoomAt((V._gs * e.scale) / V.s, e.clientX - r.left, e.clientY - r.top); });
+cv.addEventListener('gesturestart', e => { e.preventDefault(); if (tg) return; const V = mode === 'real' ? rview : view; V._gs = V.s; });
+cv.addEventListener('gesturechange', e => { e.preventDefault(); if (tg) return; const V = mode === 'real' ? rview : view, r = cv.getBoundingClientRect(); zoomAt((V._gs * e.scale) / V.s, e.clientX - r.left, e.clientY - r.top); });
 
 // ------------------------------------------------------------ klávesnice
 window.addEventListener('keydown', e => {
@@ -755,7 +829,7 @@ function rDown(e) {
   if (h && h.dev) {
     const u = h.dev.uid; rwsel = -1;
     if (e.shiftKey) { rsel.has(u) ? rsel.delete(u) : rsel.add(u); } else if (!rsel.has(u)) rsel = new Set([u]);
-    rdrag = { kind: 'move', lx: x, ly: y, moved: false }; render(); return;
+    rdrag = { kind: 'move', lx: x, ly: y, moved: false, sx: e.clientX, sy: e.clientY, touch: e.pointerType === 'touch' }; render(); return;
   }
   rsel = new Set(); rwsel = -1; rdrag = { kind: 'pan', cx: e.clientX, cy: e.clientY }; render();
 }
@@ -763,6 +837,7 @@ function rMove(e) {
   const [x, y] = rToWorld(e); rmouse.x = x; rmouse.y = y; rmouse.in = e.target === cv;
   if (rdrag && rdrag.kind === 'pan') { rview.ox += e.clientX - rdrag.cx; rview.oy += e.clientY - rdrag.cy; rdrag.cx = e.clientX; rdrag.cy = e.clientY; }
   else if (rdrag && rdrag.kind === 'move') {
+    if (!rdrag.moved && rdrag.touch && Math.hypot(e.clientX - rdrag.sx, e.clientY - rdrag.sy) < TAP) return;
     const dx = Math.round(x - rdrag.lx), dy = Math.round(y - rdrag.ly);
     if (dx || dy) {
       if (!rdrag.moved) { pushUndo(); rdrag.moved = true; }
@@ -976,6 +1051,13 @@ function setTab(t) {
   if (t === 'real' && !rview.fitted) rFit(); else render();
 }
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { setTab(b.dataset.tab); b.blur(); }));
+$('#cvBand').addEventListener('click', () => setTool(tool.kind === 'band' ? { kind: 'select' } : { kind: 'band' }));
+$('#cvProps').addEventListener('click', () => { const it = doc.items.find(i => sel.has(i.uid)); if (it) editProps(it); });
+$('#cvDone').addEventListener('click', () => { if (mode === 'real') { rdraft = null; rSetTool({ kind: 'select' }); } else if (tool.kind === 'wire' && tool.start) { tool.start = null; render(); } else setTool({ kind: 'select' }); });
+$('#menubtn').addEventListener('click', () => { const o = $('#bar').classList.toggle('menuopen'); $('#menubtn').setAttribute('aria-expanded', String(o)); });
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#bar')) { $('#bar').classList.remove('menuopen'); $('#menubtn').setAttribute('aria-expanded', 'false'); } });
+$('#bar').addEventListener('change', () => $('#bar').classList.remove('menuopen'));
+$('#bar').addEventListener('click', e => { if (e.target.closest('[data-cmd]')) $('#bar').classList.remove('menuopen'); });
 buildPalette(); buildRealPalette(); setTool({ kind: 'select' }); title();
 new ResizeObserver(render).observe(stage);
 window.addEventListener('beforeunload', e => { if (dirty && !native) { e.preventDefault(); e.returnValue = ''; } });
